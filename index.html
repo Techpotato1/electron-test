@@ -12,12 +12,26 @@
 </head>
 
 <body>
-  <div class="header">
-    <h1>Windows Disk Cleanup</h1>
-    <button id="darkModeToggle" class="dark-mode-toggle">
-      <span class="material-icons">dark_mode</span>
-    </button>
+  <!-- Loading Screen -->
+  <div id="loadingScreen" class="loading-screen">
+    <div class="loading-content">
+      <div class="loading-icon">
+        <span class="material-icons">cleaning_services</span>
+      </div>
+      <h1 class="loading-title">Windows Disk Cleanup</h1>
+      <div class="loading-spinner"></div>
+      <p class="loading-text">Initializing cleanup tools...</p>
+    </div>
   </div>
+
+  <!-- Main Content (initially hidden) -->
+  <div id="mainContent" class="main-content" style="display: none;">
+    <div class="header">
+      <h1>Windows Disk Cleanup</h1>
+      <button id="darkModeToggle" class="dark-mode-toggle">
+        <span class="material-icons">dark_mode</span>
+      </button>
+    </div>
   <p>Select items to clean:</p>
   
   <div class="cleanup-container">
@@ -136,6 +150,7 @@
   </div>
   
   <p id="info"></p>
+  </div> <!-- End main content -->
 </body>
 <script src="./render.js"></script>
 

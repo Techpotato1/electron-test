@@ -1,5 +1,75 @@
 const information = document.getElementById('info')
 
+// Loading Screen Management
+function hideLoadingScreen() {
+    const loadingScreen = document.getElementById('loadingScreen')
+    const mainContent = document.getElementById('mainContent')
+    
+    if (loadingScreen && mainContent) {
+        // Fade out loading screen
+        loadingScreen.style.animation = 'fadeOut 0.5s ease-out'
+        
+        setTimeout(() => {
+            loadingScreen.style.display = 'none'
+            mainContent.style.display = 'block'
+            
+            // Initialize dark mode after showing main content
+            initializeDarkMode()
+        }, 500)
+    }
+}
+
+// Initialize the app after everything loads
+async function initializeApp() {
+    const loadingText = document.querySelector('.loading-text')
+    
+    try {
+        // Check admin privileges first
+        if (loadingText) loadingText.textContent = 'Checking privileges...'
+        await new Promise(resolve => requestAnimationFrame(resolve))
+        
+        const adminStatus = await window.versions.checkAdminPrivileges()
+        console.log('Admin status:', adminStatus)
+        
+        // Update loading text immediately (synchronous)
+        if (loadingText) loadingText.textContent = 'Loading cleanup data...'
+        
+        // Use requestAnimationFrame to ensure loading screen renders before heavy work
+        await new Promise(resolve => requestAnimationFrame(resolve))
+        
+        // Initialize file sizes (this is the heavy async work)
+        await updateFileSizes()
+        
+        // Show admin status in UI after loading
+        showAdminStatus(adminStatus)
+        
+        // Update loading text (synchronous)
+        if (loadingText) loadingText.textContent = 'Setting up interface...'
+        
+        // Another frame to show the final message
+        await new Promise(resolve => requestAnimationFrame(resolve))
+        
+        // Hide loading screen and show main content
+        hideLoadingScreen()
+        
+    } catch (error) {
+        console.error('Error initializing app:', error)
+        // Still hide loading screen even if there's an error
+        if (loadingText) loadingText.textContent = 'Error loading data...'
+        setTimeout(hideLoadingScreen, 1000)
+    }
+}
+
+// Add fadeOut animation to CSS
+const style = document.createElement('style')
+style.textContent = `
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+`
+document.head.appendChild(style)
+
 const func = async () => {
     const response = await window.versions.ping()
     console.log(response)
@@ -96,52 +166,51 @@ function updateTally() {
     }
 }
 
-// Load file sizes when page loads
-updateFileSizes()
-
 // Variable to track space saved
 let totalSpaceSaved = 0
 
 // Light/Dark mode toggle functionality
-const darkModeToggle = document.getElementById('darkModeToggle')
-const darkModeIcon = darkModeToggle.querySelector('.material-icons')
-const body = document.body
+function initializeDarkMode() {
+    const darkModeToggle = document.getElementById('darkModeToggle')
+    const darkModeIcon = darkModeToggle.querySelector('.material-icons')
+    const body = document.body
 
-// Check for saved light mode preference (default is dark mode)
-const isLightMode = localStorage.getItem('lightMode') === 'true'
-if (isLightMode) {
-    body.classList.add('light-mode')
-    darkModeIcon.textContent = 'dark_mode'
-} else {
-    darkModeIcon.textContent = 'light_mode'
-}
+    // Check for saved light mode preference (default is dark mode)
+    const isLightMode = localStorage.getItem('lightMode') === 'true'
+    if (isLightMode) {
+        body.classList.add('light-mode')
+        darkModeIcon.textContent = 'dark_mode'
+    } else {
+        darkModeIcon.textContent = 'light_mode'
+    }
 
-darkModeToggle.addEventListener('click', () => {
-    // Add spinning animation
-    darkModeToggle.classList.add('spinning')
-    
-    // Change the icon immediately when spinning starts
-    body.classList.toggle('light-mode')
-    const isNowLight = body.classList.contains('light-mode')
-    
-    // Save preference
-    localStorage.setItem('lightMode', isNowLight)
-    
-    // Update icon while spinning
-    darkModeIcon.textContent = isNowLight ? 'dark_mode' : 'light_mode'
-    
-    // Remove spinning class and add completion class for smooth transition after animation
-    setTimeout(() => {
-        darkModeToggle.classList.remove('spinning')
-        darkModeToggle.classList.add('spin-complete')
+    darkModeToggle.addEventListener('click', () => {
+        // Add spinning animation
+        darkModeToggle.classList.add('spinning')
         
-        // Reset transform after the transition completes
+        // Change the icon immediately when spinning starts
+        body.classList.toggle('light-mode')
+        const isNowLight = body.classList.contains('light-mode')
+        
+        // Save preference
+        localStorage.setItem('lightMode', isNowLight)
+        
+        // Update icon while spinning
+        darkModeIcon.textContent = isNowLight ? 'dark_mode' : 'light_mode'
+        
+        // Remove spinning class and add completion class for smooth transition after animation
         setTimeout(() => {
-            darkModeToggle.classList.remove('spin-complete')
-            darkModeIcon.style.transform = 'rotate(0deg)'
-        }, 300)
-    }, 500) // Full duration of the spin animation
-})
+            darkModeToggle.classList.remove('spinning')
+            darkModeToggle.classList.add('spin-complete')
+            
+            // Reset transform after the transition completes
+            setTimeout(() => {
+                darkModeToggle.classList.remove('spin-complete')
+                darkModeIcon.style.transform = 'rotate(0deg)'
+            }, 300)
+        }, 500) // Full duration of the spin animation
+    })
+}
 
 // Show version info at bottom
 information.innerHTML = `
@@ -152,6 +221,43 @@ information.innerHTML = `
         Electron: v${versions.electron()}
     </div>
 `
+
+// Function to show admin status in the UI
+function showAdminStatus(adminStatus) {
+    // Create or update admin status indicator
+    let statusElement = document.getElementById('admin-status')
+    if (!statusElement) {
+        statusElement = document.createElement('div')
+        statusElement.id = 'admin-status'
+        statusElement.className = 'admin-status'
+        
+        // Insert after the main header
+        const header = document.querySelector('.header')
+        header.insertAdjacentElement('afterend', statusElement)
+    }
+    
+    statusElement.innerHTML = `
+        <span class="admin-icon">${adminStatus.hasAdmin ? '🔓' : '🔒'}</span>
+        <span class="admin-message">${adminStatus.message}</span>
+    `
+    
+    statusElement.className = `admin-status ${adminStatus.hasAdmin ? 'has-admin' : 'no-admin'}`
+    
+    // Make the admin status message disappear after 3 seconds with smooth animation
+    setTimeout(() => {
+        if (statusElement) {
+            // Add removing class for smooth transition
+            statusElement.classList.add('removing')
+            
+            // Remove element after transition completes (optimized timing)
+            setTimeout(() => {
+                if (statusElement && statusElement.parentNode) {
+                    statusElement.parentNode.removeChild(statusElement)
+                }
+            }, 250) // Match the CSS transition duration (0.25s)
+        }
+    }, 3000)
+}
 
 // Handle checkbox interactions
 document.getElementById('rescanSizes').addEventListener('click', async () => {
@@ -347,3 +453,22 @@ document.getElementById('runCleanup').addEventListener('click', async () => {
         `
     }
 })
+
+// Initialize the app immediately when script loads - NO DELAYS!
+function startApp() {
+    // Apply saved theme immediately to loading screen (synchronous, no delay)
+    const isLightMode = localStorage.getItem('lightMode') === 'true'
+    if (isLightMode) {
+        document.body.classList.add('light-mode')
+    }
+    
+    // Start app initialization immediately (async work happens in background)
+    initializeApp()
+}
+
+// Start the app immediately when script loads - NO DELAYS!
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startApp)
+} else {
+    startApp()
+}

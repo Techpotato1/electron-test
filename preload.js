@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('versions', {
   ping: () => ipcRenderer.invoke('ping'),
   getCleanupSize: (category) => ipcRenderer.invoke('get-cleanup-size', category),
   getCleanupRawSize: (category) => ipcRenderer.invoke('get-cleanup-raw-size', category),
+  checkAdminPrivileges: () => ipcRenderer.invoke('check-admin-privileges'),
   runDiskCleanup: (categories) => ipcRenderer.invoke('run-disk-cleanup', categories),
   // we can also expose variables, not just functions
 })

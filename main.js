@@ -3,6 +3,7 @@ const path = require('node:path')
 const fs = require('fs')
 const os = require('os')
 const { spawn } = require('child_process')
+const { Worker } = require('worker_threads')
 
 // Function to format bytes to human readable format
 function formatBytes(bytes) {
@@ -352,6 +353,106 @@ function deleteFile(filePath) {
   }
 }
 
+// Function to check if running as administrator
+function isRunningAsAdmin() {
+  try {
+    // Try to access a Windows system file that requires admin privileges
+    fs.accessSync('C:\\Windows\\System32\\config\\system', fs.constants.R_OK)
+    return true
+  } catch (error) {
+    return false
+  }
+}
+
+// Function to check if a path requires admin privileges
+function requiresAdminPrivileges(filePath) {
+  const adminPaths = [
+    'C:\\Windows\\Temp',
+    'C:\\Windows\\Downloaded Program Files', 
+    'C:\\Windows\\MEMORY.DMP',
+    'C:\\Windows\\Minidump',
+    'C:\\Windows\\Logs',
+    'C:\\Windows\\Panther',
+    'C:\\Windows\\inf',
+    'C:\\Windows\\SoftwareDistribution',
+    'C:\\Windows.old',
+    'C:\\$Windows.~BT',
+    'C:\\$Windows.~WS',
+    'C:\\$Recycle.Bin',
+    'D:\\$Recycle.Bin',
+    'E:\\$Recycle.Bin',
+    'F:\\$Recycle.Bin'
+  ]
+  
+  return adminPaths.some(adminPath => filePath.startsWith(adminPath))
+}
+
+// Enhanced directory deletion with admin privilege checking
+function deleteDirectoryContentsWithPrivilegeCheck(dirPath) {
+  let deletedSize = 0
+  const requiresAdmin = requiresAdminPrivileges(dirPath)
+  const hasAdmin = isRunningAsAdmin()
+  
+  // Skip admin-required paths if not running as admin
+  if (requiresAdmin && !hasAdmin) {
+    console.log(`Skipping ${dirPath} - requires administrator privileges`)
+    return 0
+  }
+  
+  try {
+    if (!fs.existsSync(dirPath)) return 0
+    
+    const items = fs.readdirSync(dirPath)
+    
+    for (const item of items) {
+      const itemPath = path.join(dirPath, item)
+      try {
+        const stats = fs.statSync(itemPath)
+        
+        if (stats.isDirectory()) {
+          deletedSize += deleteDirectoryContentsWithPrivilegeCheck(itemPath)
+          fs.rmdirSync(itemPath)
+        } else {
+          deletedSize += stats.size
+          fs.unlinkSync(itemPath)
+        }
+      } catch (error) {
+        // Skip files/folders that can't be deleted (in use, permissions, etc.)
+        continue
+      }
+    }
+  } catch (error) {
+    // Skip directories that can't be accessed
+    console.log(`Access denied to ${dirPath}:`, error.message)
+  }
+  
+  return deletedSize
+}
+
+// Enhanced file deletion with admin privilege checking  
+function deleteFileWithPrivilegeCheck(filePath) {
+  const requiresAdmin = requiresAdminPrivileges(filePath)
+  const hasAdmin = isRunningAsAdmin()
+  
+  // Skip admin-required files if not running as admin
+  if (requiresAdmin && !hasAdmin) {
+    console.log(`Skipping ${filePath} - requires administrator privileges`)
+    return 0
+  }
+  
+  try {
+    if (!fs.existsSync(filePath)) return 0
+    
+    const stats = fs.statSync(filePath)
+    const size = stats.size
+    fs.unlinkSync(filePath)
+    return size
+  } catch (error) {
+    console.log(`Could not delete ${filePath}:`, error.message)
+    return 0
+  }
+}
+
 // Function to get free disk space for a drive
 function getFreeDiskSpace(drivePath) {
   try {
@@ -405,6 +506,103 @@ function getActualFreeSpace() {
   })
 }
 
+// Worker pool for parallel size calculations
+class SizeCalculatorPool {
+  constructor(maxWorkers = 4) {
+    this.maxWorkers = maxWorkers
+    this.workers = []
+    this.queue = []
+    this.activeJobs = new Map()
+    this.jobId = 0
+  }
+
+  async calculateSizes(categories) {
+    const promises = categories.map(category => this.calculateSize(category))
+    return await Promise.all(promises)
+  }
+
+  calculateSize(category) {
+    return new Promise((resolve, reject) => {
+      const id = ++this.jobId
+      const job = { id, category, resolve, reject }
+      
+      this.activeJobs.set(id, job)
+      
+      if (this.workers.length < this.maxWorkers) {
+        this.createWorker(job)
+      } else {
+        this.queue.push(job)
+      }
+    })
+  }
+
+  createWorker(job) {
+    const worker = new Worker(path.join(__dirname, 'size-worker.js'))
+    
+    worker.on('message', ({ id, category, size, error, success }) => {
+      const job = this.activeJobs.get(id)
+      if (job) {
+        this.activeJobs.delete(id)
+        if (success) {
+          job.resolve({ category, size })
+        } else {
+          job.reject(new Error(error))
+        }
+      }
+      
+      // Process next job in queue
+      if (this.queue.length > 0) {
+        const nextJob = this.queue.shift()
+        worker.postMessage({ category: nextJob.category, id: nextJob.id })
+      } else {
+        // Terminate worker if no more jobs
+        worker.terminate()
+        this.workers = this.workers.filter(w => w !== worker)
+      }
+    })
+
+    worker.on('error', (error) => {
+      const job = this.activeJobs.get(job.id)
+      if (job) {
+        this.activeJobs.delete(job.id)
+        job.reject(error)
+      }
+    })
+
+    this.workers.push(worker)
+    worker.postMessage({ category: job.category, id: job.id })
+  }
+
+  terminate() {
+    this.workers.forEach(worker => worker.terminate())
+    this.workers = []
+    this.queue = []
+    this.activeJobs.clear()
+  }
+}
+
+// Global worker pool instance
+const sizeCalculatorPool = new SizeCalculatorPool(4)
+
+// Enhanced function to get cleanup sizes in parallel
+async function getCleanupSizesParallel(categories) {
+  try {
+    const results = await sizeCalculatorPool.calculateSizes(categories)
+    return results.reduce((acc, { category, size }) => {
+      acc[category] = size
+      return acc
+    }, {})
+  } catch (error) {
+    console.error('Error in parallel size calculation:', error)
+    // Fallback to sequential calculation
+    const results = {}
+    for (const category of categories) {
+      results[category] = getCleanupRawSize(category)
+    }
+    return results
+  }
+}
+
 // Function to run disk cleanup
 async function runDiskCleanup(categories) {
   return new Promise(async (resolve, reject) => {
@@ -413,6 +611,13 @@ async function runDiskCleanup(categories) {
       const tempDir = os.tmpdir()
       let totalDeleted = 0
       const deletedCategories = []
+      const skippedCategories = []
+      const hasAdmin = isRunningAsAdmin()
+      
+      // Warn user if not running as admin
+      if (!hasAdmin) {
+        console.log('⚠️ Not running as administrator - some system files may be skipped')
+      }
       
       // Get disk space before cleanup
       let freeSpaceBefore = 0
@@ -424,28 +629,31 @@ async function runDiskCleanup(categories) {
       
       for (const category of categories) {
         let categoryDeleted = 0
+        let categorySkipped = false
         
         switch (category) {
           case 'temp-files':
-            // Clean user temp folder
+            // Clean user temp folder (usually accessible)
             const userTempPath = path.join(userProfile, 'AppData\\Local\\Temp')
             categoryDeleted += deleteDirectoryContents(userTempPath)
             
-            // Clean system temp folder
-            categoryDeleted += deleteDirectoryContents(tempDir)
+            // Clean system temp folder (may require admin)
+            categoryDeleted += deleteDirectoryContentsWithPrivilegeCheck(tempDir)
             
-            // Clean Windows temp folder
-            categoryDeleted += deleteDirectoryContents('C:\\Windows\\Temp')
+            // Clean Windows temp folder (requires admin)
+            const windowsTempDeleted = deleteDirectoryContentsWithPrivilegeCheck('C:\\Windows\\Temp')
+            categoryDeleted += windowsTempDeleted
             
             if (categoryDeleted > 0) deletedCategories.push('Temporary Files')
+            else if (!hasAdmin) skippedCategories.push('Temporary Files (requires admin)')
             break
             
           case 'temp-internet':
-            // Clean IE cache
+            // Clean IE cache (user accessible)
             const ieCachePath = path.join(userProfile, 'AppData\\Local\\Microsoft\\Windows\\INetCache')
             categoryDeleted += deleteDirectoryContents(ieCachePath)
             
-            // Clean IE history
+            // Clean IE history (user accessible)
             const ieHistoryPath = path.join(userProfile, 'AppData\\Local\\Microsoft\\Windows\\History')
             categoryDeleted += deleteDirectoryContents(ieHistoryPath)
             
@@ -453,25 +661,28 @@ async function runDiskCleanup(categories) {
             break
             
           case 'recycle-bin':
-            // Empty recycle bin on all drives
+            // Empty recycle bin on all drives (may require admin)
             const drives = ['C:', 'D:', 'E:', 'F:']
             for (const drive of drives) {
               const recycleBinPath = path.join(drive, '\\', '$Recycle.Bin')
-              categoryDeleted += deleteDirectoryContents(recycleBinPath)
+              categoryDeleted += deleteDirectoryContentsWithPrivilegeCheck(recycleBinPath)
             }
             
             if (categoryDeleted > 0) deletedCategories.push('Recycle Bin')
+            else if (!hasAdmin) skippedCategories.push('Recycle Bin (requires admin)')
             break
             
           case 'downloaded-program-files':
             const downloadedFilesPath = 'C:\\Windows\\Downloaded Program Files'
-            categoryDeleted += deleteDirectoryContents(downloadedFilesPath)
+            const downloadedDeleted = deleteDirectoryContentsWithPrivilegeCheck(downloadedFilesPath)
+            categoryDeleted += downloadedDeleted
             
             if (categoryDeleted > 0) deletedCategories.push('Downloaded Program Files')
+            else if (!hasAdmin) skippedCategories.push('Downloaded Program Files (requires admin)')
             break
             
           case 'thumbnails':
-            // Clean thumbnail cache
+            // Clean thumbnail cache (user accessible)
             const thumbPaths = [
               path.join(userProfile, 'AppData\\Local\\Microsoft\\Windows\\Explorer'),
               path.join(userProfile, 'AppData\\Local\\IconCache.db')
@@ -497,15 +708,19 @@ async function runDiskCleanup(categories) {
             
           case 'system-error-memory-dump':
             const memoryDumpPath = 'C:\\Windows\\MEMORY.DMP'
-            categoryDeleted += deleteFile(memoryDumpPath)
+            const memoryDumpDeleted = deleteFileWithPrivilegeCheck(memoryDumpPath)
+            categoryDeleted += memoryDumpDeleted
             
             if (categoryDeleted > 0) deletedCategories.push('System error memory dump files')
+            else if (!hasAdmin) skippedCategories.push('System error memory dump files (requires admin)')
             break
             
           case 'system-error-minidump':
-            categoryDeleted += deleteDirectoryContents('C:\\Windows\\Minidump')
+            const minidumpDeleted = deleteDirectoryContentsWithPrivilegeCheck('C:\\Windows\\Minidump')
+            categoryDeleted += minidumpDeleted
             
             if (categoryDeleted > 0) deletedCategories.push('System error minidump files')
+            else if (!hasAdmin) skippedCategories.push('System error minidump files (requires admin)')
             break
             
           case 'temporary-sync-files':
@@ -522,24 +737,26 @@ async function runDiskCleanup(categories) {
             ]
             
             for (const logPath of setupLogPaths) {
-              categoryDeleted += deleteDirectoryContents(logPath)
+              categoryDeleted += deleteDirectoryContentsWithPrivilegeCheck(logPath)
             }
             
-            // Delete specific log file
-            categoryDeleted += deleteFile('C:\\Windows\\inf\\setupapi.log')
+            // Delete specific log file (requires admin)
+            categoryDeleted += deleteFileWithPrivilegeCheck('C:\\Windows\\inf\\setupapi.log')
             
             if (categoryDeleted > 0) deletedCategories.push('Setup Log Files')
+            else if (!hasAdmin) skippedCategories.push('Setup Log Files (requires admin)')
             break
             
           case 'old-chkdsk-files':
-            // Delete FOUND.* folders on drives
+            // Delete FOUND.* folders on drives (may require admin)
             const chkdskDrives = ['C:', 'D:', 'E:', 'F:']
             for (const drive of chkdskDrives) {
               const foundPath = path.join(drive, '\\', 'FOUND.000')
-              categoryDeleted += deleteDirectoryContents(foundPath)
+              categoryDeleted += deleteDirectoryContentsWithPrivilegeCheck(foundPath)
             }
             
             if (categoryDeleted > 0) deletedCategories.push('Old Chkdsk files')
+            else if (!hasAdmin) skippedCategories.push('Old Chkdsk files (requires admin)')
             break
             
           case 'user-file-history':
@@ -557,10 +774,11 @@ async function runDiskCleanup(categories) {
             ]
             
             for (const oldPath of windowsOldPaths) {
-              categoryDeleted += deleteDirectoryContents(oldPath)
+              categoryDeleted += deleteDirectoryContentsWithPrivilegeCheck(oldPath)
             }
             
             if (categoryDeleted > 0) deletedCategories.push('Previous Windows installation(s)')
+            else if (!hasAdmin) skippedCategories.push('Previous Windows installation(s) (requires admin)')
             break
             
           case 'windows-update-cleanup':
@@ -570,10 +788,11 @@ async function runDiskCleanup(categories) {
             ]
             
             for (const updatePath of updatePaths) {
-              categoryDeleted += deleteDirectoryContents(updatePath)
+              categoryDeleted += deleteDirectoryContentsWithPrivilegeCheck(updatePath)
             }
             
             if (categoryDeleted > 0) deletedCategories.push('Windows Update Cleanup')
+            else if (!hasAdmin) skippedCategories.push('Windows Update Cleanup (requires admin)')
             break
             
           case 'windows-upgrade-log-files':
@@ -583,14 +802,15 @@ async function runDiskCleanup(categories) {
             ]
             
             for (const logPath of upgradeLogPaths) {
-              categoryDeleted += deleteDirectoryContents(logPath)
+              categoryDeleted += deleteDirectoryContentsWithPrivilegeCheck(logPath)
             }
             
-            // Delete specific log file
+            // Delete specific log file (user accessible)
             const usrClassLog = path.join(userProfile, 'AppData\\Local\\Microsoft\\Windows\\UsrClass.dat.LOG1')
             categoryDeleted += deleteFile(usrClassLog)
             
             if (categoryDeleted > 0) deletedCategories.push('Windows Upgrade log files')
+            else if (!hasAdmin) skippedCategories.push('Windows Upgrade log files (requires admin)')
             break
         }
         
@@ -624,21 +844,37 @@ async function runDiskCleanup(categories) {
         console.log(`Disk measurement failed, using 0`)
       }
 
+      // Build result message
+      let resultMessage = ''
+      let resultSuccess = false
+      
       if (deletedCategories.length > 0) {
-        resolve({
-          success: true,
-          message: `Successfully cleaned: ${deletedCategories.join(', ')}.`,
-          actualSpaceFreed: actualSpaceFreed,
-          formattedSize: formatBytes(actualSpaceFreed)
-        })
+        resultMessage = `Successfully cleaned: ${deletedCategories.join(', ')}.`
+        resultSuccess = true
+        
+        if (skippedCategories.length > 0) {
+          resultMessage += `\n\nSkipped (requires administrator): ${skippedCategories.join(', ')}.`
+          resultMessage += `\n\n💡 Run as administrator to clean all system files.`
+        }
       } else {
-        resolve({
-          success: false,
-          message: 'No files were deleted. Selected categories may be empty or inaccessible.',
-          actualSpaceFreed: 0,
-          formattedSize: '0 B'
-        })
+        if (skippedCategories.length > 0) {
+          resultMessage = `No files cleaned - all selected categories require administrator privileges.\n\n`
+          resultMessage += `Skipped: ${skippedCategories.join(', ')}.`
+          resultMessage += `\n\n🔐 Right-click the app and select "Run as administrator" to clean system files.`
+        } else {
+          resultMessage = 'No files were deleted. Selected categories may be empty or inaccessible.'
+        }
+        resultSuccess = false
       }
+
+      resolve({
+        success: resultSuccess,
+        message: resultMessage,
+        actualSpaceFreed: actualSpaceFreed,
+        formattedSize: formatBytes(actualSpaceFreed),
+        hasAdmin: hasAdmin,
+        skippedCount: skippedCategories.length
+      })
       
     } catch (error) {
       reject({
@@ -664,16 +900,11 @@ function createWindow() {
       contextIsolation: true
     },
     title: 'Windows Disk Cleanup',
-    show: false
+    show: true // Show immediately since we have a loading screen
   })
 
   win.setMenuBarVisibility(false)
   win.loadFile('index.html')
-  
-  // Show window when ready to prevent visual flash
-  win.once('ready-to-show', () => {
-    win.show()
-  })
 }
 
 app.whenReady().then(() => {
@@ -683,6 +914,14 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('get-cleanup-raw-size', (event, category) => {
     return getCleanupRawSize(category)
+  })
+  ipcMain.handle('check-admin-privileges', () => {
+    return {
+      hasAdmin: isRunningAsAdmin(),
+      message: isRunningAsAdmin() ? 
+        'Running as administrator - can clean all system files' : 
+        'Running as standard user - some system files will be skipped'
+    }
   })
   ipcMain.handle('run-disk-cleanup', async (event, categories) => {
     return await runDiskCleanup(categories)
