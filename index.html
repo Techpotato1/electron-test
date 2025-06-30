@@ -7,12 +7,126 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com" />
   <meta http-equiv="X-Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
   <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
-  <h1>Hello from Electron renderer!</h1>
-  <p>👋</p>
+  <div class="header">
+    <h1>Windows Disk Cleanup</h1>
+    <button id="darkModeToggle" class="dark-mode-toggle">
+      <span class="material-icons">dark_mode</span>
+    </button>
+  </div>
+  <p>Select items to clean:</p>
+  
+  <div class="cleanup-container">
+    <div class="cleanup-item">
+      <input type="checkbox" id="temp-files" value="temp-files">
+      <label for="temp-files">Temporary files</label>
+      <span class="description">Files in your Temp folders that are older than a week</span>
+    </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="temp-internet" value="temp-internet">
+      <label for="temp-internet">Temporary Internet Files</label>
+      <span class="description">Cached web pages, images, and media from Internet Explorer</span>
+    </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="recycle-bin" value="recycle-bin">
+      <label for="recycle-bin">Recycle Bin</label>
+      <span class="description">Files you have deleted but not permanently removed</span>
+    </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="downloaded-program-files" value="downloaded-program-files">
+      <label for="downloaded-program-files">Downloaded Program Files</label>
+      <span class="description">ActiveX controls and Java applets downloaded from the Internet</span>
+    </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="thumbnails" value="thumbnails">
+      <label for="thumbnails">Thumbnails</label>
+      <span class="description">Windows keeps a copy of all your picture, video, and document thumbnails</span>
+    </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="offline-webpages" value="offline-webpages">
+      <label for="offline-webpages">Offline webpages</label>
+      <span class="description">Webpages stored on your computer for offline viewing</span>
+    </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="system-error-memory-dump" value="system-error-memory-dump">
+      <label for="system-error-memory-dump">System error memory dump files</label>
+      <span class="description">Files created when Windows crashes</span>
+    </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="system-error-minidump" value="system-error-minidump">
+      <label for="system-error-minidump">System error minidump files</label>
+      <span class="description">Small files created when Windows crashes</span>
+    </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="temporary-sync-files" value="temporary-sync-files">
+      <label for="temporary-sync-files">Temporary Sync Files</label>
+      <span class="description">Files left behind by the Sync process</span>
+    </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="setup-log-files" value="setup-log-files">
+      <label for="setup-log-files">Setup Log Files</label>
+      <span class="description">Files created by Windows during setup</span>
+    </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="old-chkdsk-files" value="old-chkdsk-files">
+      <label for="old-chkdsk-files">Old Chkdsk files</label>
+      <span class="description">Lost file fragments from disk checking</span>
+    </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="user-file-history" value="user-file-history">
+      <label for="user-file-history">User File History</label>
+      <span class="description">Copies of your files that are stored by File History</span>
+    </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="previous-windows-installations" value="previous-windows-installations">
+      <label for="previous-windows-installations">Previous Windows installation(s)</label>
+      <span class="description">Files from a previous Windows installation</span>
+    </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="windows-update-cleanup" value="windows-update-cleanup">
+      <label for="windows-update-cleanup">Windows Update Cleanup</label>
+      <span class="description">Copy of Windows Update files that are no longer needed</span>
+    </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="windows-upgrade-log-files" value="windows-upgrade-log-files">
+      <label for="windows-upgrade-log-files">Windows Upgrade log files</label>
+      <span class="description">Files created during a Windows upgrade</span>
+    </div>
+  </div>
+  
+  <div class="actions">
+    <div class="tally-container">
+      <div class="tally-display">
+        <span class="tally-label">Total selected:</span>
+        <span id="totalSize" class="tally-size">0 B</span>
+      </div>
+    </div>
+    <div class="action-buttons">
+      <button id="rescanSizes">Rescan Sizes</button>
+      <button id="selectAll">Select All</button>
+      <button id="clearAll">Clear All</button>
+      <button id="runCleanup">Run Cleanup</button>
+    </div>
+  </div>
+  
   <p id="info"></p>
 </body>
 <script src="./render.js"></script>
