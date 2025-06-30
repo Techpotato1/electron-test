@@ -352,14 +352,75 @@ function deleteFile(filePath) {
   }
 }
 
+// Function to get free disk space for a drive
+function getFreeDiskSpace(drivePath) {
+  try {
+    const stats = fs.statSync(drivePath)
+    // For Windows, we'll use a workaround since Node.js doesn't have native disk space API
+    // We'll estimate based on common drive (C:) - this is a simplified approach
+    // In a production app, you might want to use a native module for accurate disk space
+    return fs.statSync('C:\\').free || 0
+  } catch (error) {
+    return 0
+  }
+}
+
+// Function to get actual free disk space using Windows command
+function getActualFreeSpace() {
+  return new Promise((resolve, reject) => {
+    const { exec } = require('child_process')
+    exec('wmic logicaldisk get size,freespace,caption /format:table', (error, stdout) => {
+      if (error) {
+        reject(new Error('Failed to get disk space'))
+        return
+      }
+      
+      try {
+        // Parse the table output to get total free space across all drives
+        const lines = stdout.split('\n')
+        let totalFreeSpace = 0
+        
+        for (const line of lines) {
+          // Skip header line and empty lines
+          if (line.includes('Caption') || !line.trim()) continue
+          
+          const parts = line.trim().split(/\s+/)
+          if (parts.length >= 3) {
+            const freeSpace = parseInt(parts[1]) // FreeSpace is the second column
+            if (!isNaN(freeSpace)) {
+              totalFreeSpace += freeSpace
+            }
+          }
+        }
+        
+        if (totalFreeSpace > 0) {
+          resolve(totalFreeSpace)
+        } else {
+          reject(new Error('Could not parse disk space output'))
+        }
+      } catch (parseError) {
+        reject(parseError)
+      }
+    })
+  })
+}
+
 // Function to run disk cleanup
 async function runDiskCleanup(categories) {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     try {
       const userProfile = os.homedir()
       const tempDir = os.tmpdir()
       let totalDeleted = 0
       const deletedCategories = []
+      
+      // Get disk space before cleanup
+      let freeSpaceBefore = 0
+      try {
+        freeSpaceBefore = await getActualFreeSpace()
+      } catch (error) {
+        console.error('Failed to measure disk space before cleanup:', error)
+      }
       
       for (const category of categories) {
         let categoryDeleted = 0
@@ -536,29 +597,83 @@ async function runDiskCleanup(categories) {
         totalDeleted += categoryDeleted
       }
       
+      // Get disk space after cleanup
+      let freeSpaceAfter = 0
+      let actualSpaceFreed = 0 // Default to 0 if measurement fails
+      
+      try {
+        freeSpaceAfter = await getActualFreeSpace()
+        actualSpaceFreed = freeSpaceAfter - freeSpaceBefore
+        
+        console.log(`Disk space before cleanup: ${formatBytes(freeSpaceBefore)}`)
+        console.log(`Disk space after cleanup: ${formatBytes(freeSpaceAfter)}`)
+        console.log(`Space difference: ${formatBytes(actualSpaceFreed)}`)
+        console.log(`Sum of deleted files: ${formatBytes(totalDeleted)}`)
+        
+        // Always use the actual space difference, even if it's 0 or negative
+        console.log(`Using actual disk space difference: ${formatBytes(actualSpaceFreed)}`)
+        
+        // Ensure we don't show negative space freed
+        if (actualSpaceFreed < 0) {
+          actualSpaceFreed = 0
+          console.log(`Space difference was negative, using 0`)
+        }
+      } catch (error) {
+        console.error('Failed to measure disk space after cleanup:', error)
+        actualSpaceFreed = 0
+        console.log(`Disk measurement failed, using 0`)
+      }
+
       if (deletedCategories.length > 0) {
-        resolve(`Successfully cleaned: ${deletedCategories.join(', ')}. ${formatBytes(totalDeleted)} freed.`)
+        resolve({
+          success: true,
+          message: `Successfully cleaned: ${deletedCategories.join(', ')}.`,
+          actualSpaceFreed: actualSpaceFreed,
+          formattedSize: formatBytes(actualSpaceFreed)
+        })
       } else {
-        resolve('No files were deleted. Selected categories may be empty or inaccessible.')
+        resolve({
+          success: false,
+          message: 'No files were deleted. Selected categories may be empty or inaccessible.',
+          actualSpaceFreed: 0,
+          formattedSize: '0 B'
+        })
       }
       
     } catch (error) {
-      reject(`Cleanup failed: ${error.message}`)
+      reject({
+        success: false,
+        message: `Cleanup failed: ${error.message}`,
+        actualSpaceFreed: 0,
+        formattedSize: '0 B'
+      })
     }
   })
 }
 
 function createWindow() {
   const win = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: 900,
+    height: 700,
+    minWidth: 800,
+    minHeight: 600,
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js')
-    }
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true
+    },
+    title: 'Windows Disk Cleanup',
+    show: false
   })
 
   win.setMenuBarVisibility(false)
   win.loadFile('index.html')
+  
+  // Show window when ready to prevent visual flash
+  win.once('ready-to-show', () => {
+    win.show()
+  })
 }
 
 app.whenReady().then(() => {

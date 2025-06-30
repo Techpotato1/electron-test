@@ -87,6 +87,13 @@ function updateTally() {
     })
     
     document.getElementById('totalSize').textContent = formatBytes(totalBytes)
+    
+    // Update label based on whether items are selected
+    if (checkedBoxes.length > 0) {
+        document.querySelector('.tally-label').textContent = 'Total selected:'
+    } else {
+        document.querySelector('.tally-label').textContent = 'Total selected:'
+    }
 }
 
 // Load file sizes when page loads
@@ -277,17 +284,25 @@ document.getElementById('runCleanup').addEventListener('click', async () => {
             progressContainer.style.display = 'none'
             information.style.display = 'block'
             
-            // Extract actual space freed from the result message
+            // Use actual space freed from the result object
             let actualSpaceFreed = 0
-            const freedMatch = result.match(/(\d+(?:\.\d+)?)\s*([KMGT]?B)\s*freed/)
-            if (freedMatch) {
-                const value = parseFloat(freedMatch[1])
-                const unit = freedMatch[2]
-                const units = { 'B': 1, 'KB': 1024, 'MB': 1024*1024, 'GB': 1024*1024*1024, 'TB': 1024*1024*1024*1024 }
-                actualSpaceFreed = Math.round(value * (units[unit] || 1))
+            let resultMessage = ''
+            
+            if (result && typeof result === 'object') {
+                actualSpaceFreed = result.actualSpaceFreed || 0
+                resultMessage = result.message || 'Cleanup completed'
             } else {
-                // Fallback to estimated size if no actual size in result
-                actualSpaceFreed = totalSizeToClean
+                // Fallback for string response (backwards compatibility)
+                const freedMatch = result.match(/(\d+(?:\.\d+)?)\s*([KMGT]?B)\s*freed/)
+                if (freedMatch) {
+                    const value = parseFloat(freedMatch[1])
+                    const unit = freedMatch[2]
+                    const units = { 'B': 1, 'KB': 1024, 'MB': 1024*1024, 'GB': 1024*1024*1024, 'TB': 1024*1024*1024*1024 }
+                    actualSpaceFreed = Math.round(value * (units[unit] || 1))
+                } else {
+                    actualSpaceFreed = totalSizeToClean
+                }
+                resultMessage = result
             }
             
             // Add actual space freed to total
@@ -300,12 +315,16 @@ document.getElementById('runCleanup').addEventListener('click', async () => {
                 <strong>Space freed:</strong> ${formatBytes(actualSpaceFreed)}<br>
                 <strong>Total space saved this session:</strong> ${formatBytes(totalSpaceSaved)}<br>
                 <br>
-                <em>${result}</em>
+                <em>${resultMessage}</em>
             `
+            
+            // Update the tally to show actual space freed instead of estimated
+            document.getElementById('totalSize').textContent = formatBytes(actualSpaceFreed)
+            document.querySelector('.tally-label').textContent = 'Space actually freed:'
             
             // Clear the checkboxes after successful cleanup
             checkboxes.forEach(checkbox => checkbox.checked = false)
-            updateTally()
+            // Don't call updateTally() here since we want to keep showing actual space freed
         }, 1000)
         
     } catch (error) {
@@ -313,9 +332,16 @@ document.getElementById('runCleanup').addEventListener('click', async () => {
         progressContainer.style.display = 'none'
         information.style.display = 'block'
         
+        let errorMessage = ''
+        if (error && typeof error === 'object' && error.message) {
+            errorMessage = error.message
+        } else {
+            errorMessage = error.toString()
+        }
+        
         information.innerHTML = `
             <strong>Cleanup failed:</strong><br>
-            <em>${error}</em>
+            <em>${errorMessage}</em>
             <br><br>
             <strong>Total space saved this session:</strong> ${formatBytes(totalSpaceSaved)}
         `

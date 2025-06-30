@@ -104,9 +104,50 @@ h1 {
 }
 
 .cleanup-item input[type="checkbox"] {
+  /* Hide the default checkbox */
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
   margin-right: 12px;
   margin-top: 2px;
-  transform: scale(1.2);
+  cursor: pointer;
+  position: relative;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.cleanup-item input[type="checkbox"]:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.05);
+}
+
+.cleanup-item input[type="checkbox"]:checked {
+  background: linear-gradient(135deg, #4CAF50, #45a049);
+  border-color: #4CAF50;
+  box-shadow: 0 0 10px rgba(76, 175, 80, 0.3);
+}
+
+.cleanup-item input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.cleanup-item input[type="checkbox"]:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.2);
 }
 
 .cleanup-item label {
@@ -322,6 +363,27 @@ body.light-mode .cleanup-item .file-size {
 
 body.light-mode .cleanup-item .description {
   color: rgba(0, 0, 0, 0.55);
+}
+
+/* Light mode checkbox styles */
+body.light-mode .cleanup-item input[type="checkbox"] {
+  border: 2px solid rgba(0, 0, 0, 0.3);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+body.light-mode .cleanup-item input[type="checkbox"]:hover {
+  border-color: rgba(0, 0, 0, 0.5);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+body.light-mode .cleanup-item input[type="checkbox"]:checked {
+  background: linear-gradient(135deg, #4CAF50, #45a049);
+  border-color: #4CAF50;
+  box-shadow: 0 0 10px rgba(76, 175, 80, 0.3);
+}
+
+body.light-mode .cleanup-item input[type="checkbox"]:focus {
+  box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.2);
 }
 
 body.light-mode .tally-display {
