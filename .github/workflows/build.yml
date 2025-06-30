@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [ main, master ]
 
+permissions:
+  contents: write
+  pull-requests: read
+
 jobs:
   build:
     runs-on: windows-latest
@@ -35,7 +39,8 @@ jobs:
         name: windows-portable
         path: dist/*.exe
 
-  release:
+  # Tagged releases (stable)
+  tagged-release:
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
@@ -44,12 +49,61 @@ jobs:
     - name: Download all artifacts
       uses: actions/download-artifact@v4
       
-    - name: Create Release
+    - name: Create Tagged Release
       uses: softprops/action-gh-release@v1
       with:
         files: |
           windows-portable/*.exe
         draft: false
         prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Nightly releases (automatic)
+  nightly-release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+    - name: Check out Git repository
+      uses: actions/checkout@v4
+      
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      
+    - name: Get current date
+      id: date
+      run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+      
+    - name: Delete previous nightly release
+      continue-on-error: true
+      run: |
+        gh release delete nightly --yes || true
+        git push --delete origin nightly || true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Create Nightly Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: nightly
+        name: "Nightly Build (${{ steps.date.outputs.date }})"
+        body: |
+          🌙 **Nightly Build - ${{ steps.date.outputs.date }}**
+          
+          This is an automated nightly build from the latest main branch.
+          
+          **⚠️ Pre-release Warning:** This build may contain experimental features and bugs.
+          
+          **Download:** Windows Disk Cleanup Tool (Portable)
+          
+          ---
+          *Built from commit: ${{ github.sha }}*
+        files: |
+          windows-portable/*.exe
+        draft: false
+        prerelease: true
+        make_latest: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
