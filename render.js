@@ -95,15 +95,17 @@ updateFileSizes()
 // Variable to track space saved
 let totalSpaceSaved = 0
 
-// Dark mode toggle functionality
+// Light/Dark mode toggle functionality
 const darkModeToggle = document.getElementById('darkModeToggle')
 const darkModeIcon = darkModeToggle.querySelector('.material-icons')
 const body = document.body
 
-// Check for saved dark mode preference
-const isDarkMode = localStorage.getItem('darkMode') === 'true'
-if (isDarkMode) {
-    body.classList.add('dark-mode')
+// Check for saved light mode preference (default is dark mode)
+const isLightMode = localStorage.getItem('lightMode') === 'true'
+if (isLightMode) {
+    body.classList.add('light-mode')
+    darkModeIcon.textContent = 'dark_mode'
+} else {
     darkModeIcon.textContent = 'light_mode'
 }
 
@@ -112,14 +114,14 @@ darkModeToggle.addEventListener('click', () => {
     darkModeToggle.classList.add('spinning')
     
     // Change the icon immediately when spinning starts
-    body.classList.toggle('dark-mode')
-    const isNowDark = body.classList.contains('dark-mode')
+    body.classList.toggle('light-mode')
+    const isNowLight = body.classList.contains('light-mode')
     
     // Save preference
-    localStorage.setItem('darkMode', isNowDark)
+    localStorage.setItem('lightMode', isNowLight)
     
     // Update icon while spinning
-    darkModeIcon.textContent = isNowDark ? 'light_mode' : 'dark_mode'
+    darkModeIcon.textContent = isNowLight ? 'dark_mode' : 'light_mode'
     
     // Remove spinning class and add completion class for smooth transition after animation
     setTimeout(() => {
@@ -176,11 +178,30 @@ document.getElementById('clearAll').addEventListener('click', () => {
     updateTally()
 })
 
-// Add event listeners to all checkboxes for tally updates
+// Add event listeners when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
+    // Add event listeners to all checkboxes for tally updates
     const checkboxes = document.querySelectorAll('input[type="checkbox"]')
     checkboxes.forEach(checkbox => {
         checkbox.addEventListener('change', updateTally)
+    })
+    
+    // Make cleanup items clickable
+    const cleanupItems = document.querySelectorAll('.cleanup-item')
+    
+    cleanupItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+            // Don't trigger if clicking directly on checkbox or label (they handle it themselves)
+            if (e.target.type === 'checkbox' || e.target.tagName === 'LABEL') {
+                return
+            }
+            
+            const checkbox = item.querySelector('input[type="checkbox"]')
+            if (checkbox && item.style.display !== 'none') {
+                checkbox.checked = !checkbox.checked
+                updateTally()
+            }
+        })
     })
 })
 
@@ -206,50 +227,92 @@ document.getElementById('runCleanup').addEventListener('click', async () => {
         return
     }
     
-    // Show what's being cleaned with size info
-    information.innerHTML = `
-        <strong>Running cleanup for:</strong><br>
-        ${checkedItems.map(item => `• ${item}`).join('<br>')}
-        <br><br>
-        <strong>Total size to clean:</strong> ${formatBytes(totalSizeToClean)}<br>
-        <em>Executing Windows Disk Cleanup...</em>
-    `
+    // Show progress bar and hide info
+    const progressContainer = document.getElementById('progressContainer')
+    const progressFill = document.getElementById('progressFill')
+    const progressText = document.getElementById('progressText')
+    
+    information.style.display = 'none'
+    progressContainer.style.display = 'block'
+    
+    // Simulate progress for each category
+    let completedCategories = 0
+    const totalCategories = checkedCategories.length
+    
+    // Update progress function
+    const updateProgress = (completed, total, currentCategory = '') => {
+        const percentage = Math.round((completed / total) * 100)
+        progressFill.style.width = `${percentage}%`
+        progressText.textContent = `${percentage}%`
+        
+        if (currentCategory) {
+            document.querySelector('.progress-label').textContent = `Cleaning ${currentCategory}...`
+        }
+    }
     
     try {
-        // Call the actual cleanup
-        const result = await window.versions.runDiskCleanup(checkedCategories)
+        // Show initial progress
+        updateProgress(0, totalCategories, checkedItems[0])
         
-        // Extract actual space freed from the result message
-        let actualSpaceFreed = 0
-        const freedMatch = result.match(/(\d+(?:\.\d+)?)\s*([KMGT]?B)\s*freed/)
-        if (freedMatch) {
-            const value = parseFloat(freedMatch[1])
-            const unit = freedMatch[2]
-            const units = { 'B': 1, 'KB': 1024, 'MB': 1024*1024, 'GB': 1024*1024*1024, 'TB': 1024*1024*1024*1024 }
-            actualSpaceFreed = Math.round(value * (units[unit] || 1))
-        } else {
-            // Fallback to estimated size if no actual size in result
-            actualSpaceFreed = totalSizeToClean
-        }
+        // Call the actual cleanup with progress simulation
+        const cleanupPromise = window.versions.runDiskCleanup(checkedCategories)
         
-        // Add actual space freed to total
-        totalSpaceSaved += actualSpaceFreed
+        // Simulate progress while cleanup is running
+        const progressInterval = setInterval(() => {
+            if (completedCategories < totalCategories) {
+                completedCategories += 0.1 // Slow progress simulation
+                updateProgress(completedCategories, totalCategories)
+            }
+        }, 200)
         
-        information.innerHTML = `
-            <strong>Cleanup completed!</strong><br>
-            ${checkedItems.map(item => `• ${item}`).join('<br>')}
-            <br><br>
-            <strong>Space freed:</strong> ${formatBytes(actualSpaceFreed)}<br>
-            <strong>Total space saved this session:</strong> ${formatBytes(totalSpaceSaved)}<br>
-            <br>
-            <em>${result}</em>
-        `
+        const result = await cleanupPromise
         
-        // Clear the checkboxes after successful cleanup
-        checkboxes.forEach(checkbox => checkbox.checked = false)
-        updateTally()
+        // Complete the progress
+        clearInterval(progressInterval)
+        updateProgress(totalCategories, totalCategories)
+        document.querySelector('.progress-label').textContent = 'Cleanup completed!'
+        
+        // Wait a moment to show completion
+        setTimeout(() => {
+            progressContainer.style.display = 'none'
+            information.style.display = 'block'
+            
+            // Extract actual space freed from the result message
+            let actualSpaceFreed = 0
+            const freedMatch = result.match(/(\d+(?:\.\d+)?)\s*([KMGT]?B)\s*freed/)
+            if (freedMatch) {
+                const value = parseFloat(freedMatch[1])
+                const unit = freedMatch[2]
+                const units = { 'B': 1, 'KB': 1024, 'MB': 1024*1024, 'GB': 1024*1024*1024, 'TB': 1024*1024*1024*1024 }
+                actualSpaceFreed = Math.round(value * (units[unit] || 1))
+            } else {
+                // Fallback to estimated size if no actual size in result
+                actualSpaceFreed = totalSizeToClean
+            }
+            
+            // Add actual space freed to total
+            totalSpaceSaved += actualSpaceFreed
+            
+            information.innerHTML = `
+                <strong>Cleanup completed!</strong><br>
+                ${checkedItems.map(item => `• ${item}`).join('<br>')}
+                <br><br>
+                <strong>Space freed:</strong> ${formatBytes(actualSpaceFreed)}<br>
+                <strong>Total space saved this session:</strong> ${formatBytes(totalSpaceSaved)}<br>
+                <br>
+                <em>${result}</em>
+            `
+            
+            // Clear the checkboxes after successful cleanup
+            checkboxes.forEach(checkbox => checkbox.checked = false)
+            updateTally()
+        }, 1000)
         
     } catch (error) {
+        // Hide progress bar and show error
+        progressContainer.style.display = 'none'
+        information.style.display = 'block'
+        
         information.innerHTML = `
             <strong>Cleanup failed:</strong><br>
             <em>${error}</em>
