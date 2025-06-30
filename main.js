@@ -122,22 +122,6 @@ function getCleanupSize(category) {
     case 'system-error-minidump':
       return formatBytes(getDirectorySize('C:\\Windows\\Minidump'))
     
-    case 'temporary-sync-files':
-      const syncPath = path.join(userProfile, 'AppData\\Local\\Microsoft\\Windows\\SettingSync')
-      return formatBytes(getDirectorySize(syncPath))
-    
-    case 'setup-log-files':
-      const setupLogPaths = [
-        'C:\\Windows\\Logs',
-        'C:\\Windows\\Panther',
-        'C:\\Windows\\inf\\setupapi.log'
-      ]
-      let setupLogSize = 0
-      for (const logPath of setupLogPaths) {
-        setupLogSize += getDirectorySize(logPath)
-      }
-      return formatBytes(setupLogSize)
-    
     case 'old-chkdsk-files':
       // Check for FOUND.* folders on drives
       const drives = ['C:', 'D:', 'E:', 'F:']
@@ -147,10 +131,6 @@ function getCleanupSize(category) {
         chkdskSize += getDirectorySize(foundPath)
       }
       return formatBytes(chkdskSize)
-    
-    case 'user-file-history':
-      const fileHistoryPath = path.join(userProfile, 'AppData\\Local\\Microsoft\\Windows\\FileHistory')
-      return formatBytes(getDirectorySize(fileHistoryPath))
     
     case 'previous-windows-installations':
       const windowsOldPaths = [
@@ -186,6 +166,23 @@ function getCleanupSize(category) {
         upgradeLogSize += getDirectorySize(logPath)
       }
       return formatBytes(upgradeLogSize)
+    
+    case 'debug-dump-files':
+      return formatBytes(getDirectorySize('C:\\Windows\\debug'))
+    
+    case 'per-user-temp-files':
+      const perUserWerPath = path.join(userProfile, 'AppData\\Local\\Microsoft\\Windows\\WER\\ReportArchive')
+      return formatBytes(getDirectorySize(perUserWerPath))
+    
+    case 'system-archived-error-reporting':
+      return formatBytes(getDirectorySize('C:\\ProgramData\\Microsoft\\Windows\\WER\\ReportArchive'))
+    
+    case 'per-user-queued-error-reporting':
+      const perUserQueuedPath = path.join(userProfile, 'AppData\\Local\\Microsoft\\Windows\\WER\\ReportQueue')
+      return formatBytes(getDirectorySize(perUserQueuedPath))
+    
+    case 'system-queued-error-reporting':
+      return formatBytes(getDirectorySize('C:\\ProgramData\\Microsoft\\Windows\\WER\\ReportQueue'))
     
     default:
       return '0 B'
@@ -236,22 +233,6 @@ function getCleanupRawSize(category) {
     case 'system-error-minidump':
       return getDirectorySize('C:\\Windows\\Minidump')
     
-    case 'temporary-sync-files':
-      const syncPath = path.join(userProfile, 'AppData\\Local\\Microsoft\\Windows\\SettingSync')
-      return getDirectorySize(syncPath)
-    
-    case 'setup-log-files':
-      const setupLogPaths = [
-        'C:\\Windows\\Logs',
-        'C:\\Windows\\Panther',
-        'C:\\Windows\\inf\\setupapi.log'
-      ]
-      let setupLogSize = 0
-      for (const logPath of setupLogPaths) {
-        setupLogSize += getDirectorySize(logPath)
-      }
-      return setupLogSize
-    
     case 'old-chkdsk-files':
       // Check for FOUND.* folders on drives
       const drives = ['C:', 'D:', 'E:', 'F:']
@@ -261,10 +242,6 @@ function getCleanupRawSize(category) {
         chkdskSize += getDirectorySize(foundPath)
       }
       return chkdskSize
-    
-    case 'user-file-history':
-      const fileHistoryPath = path.join(userProfile, 'AppData\\Local\\Microsoft\\Windows\\FileHistory')
-      return getDirectorySize(fileHistoryPath)
     
     case 'previous-windows-installations':
       const windowsOldPaths = [
@@ -300,6 +277,22 @@ function getCleanupRawSize(category) {
         upgradeLogSize += getDirectorySize(logPath)
       }
       return upgradeLogSize
+    
+    case 'debug-dump-files':
+      return getDirectorySize('C:\\Windows\\debug')
+    
+    case 'per-user-temp-files':
+      return getDirectorySize('C:\\ProgramData\\Microsoft\\Windows\\WER\\ReportArchive')
+    
+    case 'system-archived-error-reporting':
+      return getDirectorySize('C:\\ProgramData\\Microsoft\\Windows\\WER\\ReportArchive')
+    
+    case 'per-user-queued-error-reporting':
+      const perUserQueuedPath = path.join(userProfile, 'AppData\\Local\\Microsoft\\Windows\\WER\\ReportQueue')
+      return getDirectorySize(perUserQueuedPath)
+    
+    case 'system-queued-error-reporting':
+      return getDirectorySize('C:\\ProgramData\\Microsoft\\Windows\\WER\\ReportQueue')
     
     default:
       return 0
@@ -378,10 +371,6 @@ function requiresAdminPrivileges(filePath) {
     'C:\\Windows.old',
     'C:\\$Windows.~BT',
     'C:\\$Windows.~WS',
-    'C:\\$Recycle.Bin',
-    'D:\\$Recycle.Bin',
-    'E:\\$Recycle.Bin',
-    'F:\\$Recycle.Bin'
   ]
   
   return adminPaths.some(adminPath => filePath.startsWith(adminPath))
@@ -723,30 +712,6 @@ async function runDiskCleanup(categories) {
             else if (!hasAdmin) skippedCategories.push('System error minidump files (requires admin)')
             break
             
-          case 'temporary-sync-files':
-            const syncPath = path.join(userProfile, 'AppData\\Local\\Microsoft\\Windows\\SettingSync')
-            categoryDeleted += deleteDirectoryContents(syncPath)
-            
-            if (categoryDeleted > 0) deletedCategories.push('Temporary Sync Files')
-            break
-            
-          case 'setup-log-files':
-            const setupLogPaths = [
-              'C:\\Windows\\Logs',
-              'C:\\Windows\\Panther'
-            ]
-            
-            for (const logPath of setupLogPaths) {
-              categoryDeleted += deleteDirectoryContentsWithPrivilegeCheck(logPath)
-            }
-            
-            // Delete specific log file (requires admin)
-            categoryDeleted += deleteFileWithPrivilegeCheck('C:\\Windows\\inf\\setupapi.log')
-            
-            if (categoryDeleted > 0) deletedCategories.push('Setup Log Files')
-            else if (!hasAdmin) skippedCategories.push('Setup Log Files (requires admin)')
-            break
-            
           case 'old-chkdsk-files':
             // Delete FOUND.* folders on drives (may require admin)
             const chkdskDrives = ['C:', 'D:', 'E:', 'F:']
@@ -757,13 +722,6 @@ async function runDiskCleanup(categories) {
             
             if (categoryDeleted > 0) deletedCategories.push('Old Chkdsk files')
             else if (!hasAdmin) skippedCategories.push('Old Chkdsk files (requires admin)')
-            break
-            
-          case 'user-file-history':
-            const fileHistoryPath = path.join(userProfile, 'AppData\\Local\\Microsoft\\Windows\\FileHistory')
-            categoryDeleted += deleteDirectoryContents(fileHistoryPath)
-            
-            if (categoryDeleted > 0) deletedCategories.push('User File History')
             break
             
           case 'previous-windows-installations':
@@ -811,6 +769,44 @@ async function runDiskCleanup(categories) {
             
             if (categoryDeleted > 0) deletedCategories.push('Windows Upgrade log files')
             else if (!hasAdmin) skippedCategories.push('Windows Upgrade log files (requires admin)')
+            break
+            
+          case 'debug-dump-files':
+            const debugDeleted = deleteDirectoryContentsWithPrivilegeCheck('C:\\Windows\\debug')
+            categoryDeleted += debugDeleted
+            
+            if (categoryDeleted > 0) deletedCategories.push('Debug Dump Files')
+            else if (!hasAdmin) skippedCategories.push('Debug Dump Files (requires admin)')
+            break
+            
+          case 'per-user-temp-files':
+            const perUserWerCleanupPath = path.join(userProfile, 'AppData\\Local\\Microsoft\\Windows\\WER\\ReportArchive')
+            categoryDeleted += deleteDirectoryContents(perUserWerCleanupPath)
+            
+            if (categoryDeleted > 0) deletedCategories.push('Per user archived Windows Error Reporting')
+            break
+            
+          case 'system-archived-error-reporting':
+            const systemArchivedDeleted = deleteDirectoryContentsWithPrivilegeCheck('C:\\ProgramData\\Microsoft\\Windows\\WER\\ReportArchive')
+            categoryDeleted += systemArchivedDeleted
+            
+            if (categoryDeleted > 0) deletedCategories.push('System archived Windows Error Reporting')
+            else if (!hasAdmin) skippedCategories.push('System archived Windows Error Reporting (requires admin)')
+            break
+            
+          case 'per-user-queued-error-reporting':
+            const perUserQueuedCleanupPath = path.join(userProfile, 'AppData\\Local\\Microsoft\\Windows\\WER\\ReportQueue')
+            categoryDeleted += deleteDirectoryContents(perUserQueuedCleanupPath)
+            
+            if (categoryDeleted > 0) deletedCategories.push('Per user queued Windows Error Reporting')
+            break
+            
+          case 'system-queued-error-reporting':
+            const systemQueuedDeleted = deleteDirectoryContentsWithPrivilegeCheck('C:\\ProgramData\\Microsoft\\Windows\\WER\\ReportQueue')
+            categoryDeleted += systemQueuedDeleted
+            
+            if (categoryDeleted > 0) deletedCategories.push('System queued Windows Error Reporting')
+            else if (!hasAdmin) skippedCategories.push('System queued Windows Error Reporting (requires admin)')
             break
         }
         

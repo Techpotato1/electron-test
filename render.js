@@ -80,6 +80,8 @@ func()
 // Function to update file sizes for cleanup categories
 async function updateFileSizes() {
     const checkboxes = document.querySelectorAll('input[type="checkbox"]')
+    const showAllButton = document.getElementById('showAllItems')
+    let hiddenCount = 0
     
     for (const checkbox of checkboxes) {
         try {
@@ -88,10 +90,11 @@ async function updateFileSizes() {
             const label = document.querySelector(`label[for="${checkbox.id}"]`)
             const cleanupItem = checkbox.closest('.cleanup-item')
             
-            // Hide items with 0 bytes
-            if (rawSize === 0 || size === '0 B') {
+            // Hide items with 0 bytes unless show all is enabled
+            if ((rawSize === 0 || size === '0 B') && cleanupItem.dataset.showAll !== 'true') {
                 cleanupItem.style.display = 'none'
                 checkbox.checked = false // Uncheck hidden items
+                hiddenCount++
                 continue
             } else {
                 cleanupItem.style.display = 'flex'
@@ -115,6 +118,20 @@ async function updateFileSizes() {
             // Hide items that error out
             const cleanupItem = checkbox.closest('.cleanup-item')
             cleanupItem.style.display = 'none'
+            hiddenCount++
+        }
+    }
+    
+    // Update show all button text - but don't override if we're in "show all" mode
+    const currentlyShowingAll = showAllButton && showAllButton.textContent.includes('Hide')
+    
+    if (!currentlyShowingAll) {
+        if (hiddenCount > 0) {
+            showAllButton.textContent = `Show All Items (${hiddenCount} hidden)`
+            showAllButton.style.display = 'inline-block'
+        } else {
+            showAllButton.textContent = 'Show All Items'
+            showAllButton.style.display = 'none'
         }
     }
     
@@ -291,6 +308,35 @@ document.getElementById('clearAll').addEventListener('click', () => {
     updateTally()
 })
 
+document.getElementById('showAllItems').addEventListener('click', async () => {
+    const showAllButton = document.getElementById('showAllItems')
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]')
+    
+    // Toggle show all state
+    const isShowingAll = showAllButton.textContent.includes('Hide')
+    
+    if (isShowingAll) {
+        // Hide items with 0 bytes again
+        showAllButton.textContent = 'Show All Items'
+        checkboxes.forEach(checkbox => {
+            const cleanupItem = checkbox.closest('.cleanup-item')
+            delete cleanupItem.dataset.showAll // Remove the attribute
+        })
+        await updateFileSizes()
+    } else {
+        // Show all items including 0 byte ones
+        showAllButton.textContent = 'Hide Empty Items'
+        checkboxes.forEach(checkbox => {
+            const cleanupItem = checkbox.closest('.cleanup-item')
+            cleanupItem.dataset.showAll = 'true'
+            cleanupItem.style.display = 'flex'
+        })
+        
+        // Update button visibility for "Hide Empty Items" state
+        showAllButton.style.display = 'inline-block'
+    }
+})
+
 // Add event listeners when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     // Add event listeners to all checkboxes for tally updates
@@ -453,6 +499,8 @@ document.getElementById('runCleanup').addEventListener('click', async () => {
         `
     }
 })
+
+
 
 // Initialize the app immediately when script loads - NO DELAYS!
 function startApp() {

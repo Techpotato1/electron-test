@@ -60,12 +60,6 @@
     </div>
     
     <div class="cleanup-item">
-      <input type="checkbox" id="thumbnails" value="thumbnails">
-      <label for="thumbnails">Thumbnails</label>
-      <span class="description">Windows keeps a copy of all your picture, video, and document thumbnails</span>
-    </div>
-    
-    <div class="cleanup-item">
       <input type="checkbox" id="offline-webpages" value="offline-webpages">
       <label for="offline-webpages">Offline webpages</label>
       <span class="description">Webpages stored on your computer for offline viewing</span>
@@ -84,27 +78,15 @@
     </div>
     
     <div class="cleanup-item">
-      <input type="checkbox" id="temporary-sync-files" value="temporary-sync-files">
-      <label for="temporary-sync-files">Temporary Sync Files</label>
-      <span class="description">Files left behind by the Sync process</span>
-    </div>
-    
-    <div class="cleanup-item">
-      <input type="checkbox" id="setup-log-files" value="setup-log-files">
-      <label for="setup-log-files">Setup Log Files</label>
-      <span class="description">Files created by Windows during setup</span>
+      <input type="checkbox" id="debug-dump-files" value="debug-dump-files">
+      <label for="debug-dump-files">Debug Dump Files</label>
+      <span class="description">Files created by Windows to aid in troubleshooting problems</span>
     </div>
     
     <div class="cleanup-item">
       <input type="checkbox" id="old-chkdsk-files" value="old-chkdsk-files">
       <label for="old-chkdsk-files">Old Chkdsk files</label>
       <span class="description">Lost file fragments from disk checking</span>
-    </div>
-    
-    <div class="cleanup-item">
-      <input type="checkbox" id="user-file-history" value="user-file-history">
-      <label for="user-file-history">User File History</label>
-      <span class="description">Copies of your files that are stored by File History</span>
     </div>
     
     <div class="cleanup-item">
@@ -124,6 +106,36 @@
       <label for="windows-upgrade-log-files">Windows Upgrade log files</label>
       <span class="description">Files created during a Windows upgrade</span>
     </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="thumbnails" value="thumbnails">
+      <label for="thumbnails">Thumbnails</label>
+      <span class="description">Windows keeps a copy of all your picture, video, and document thumbnails</span>
+    </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="per-user-temp-files" value="per-user-temp-files">
+      <label for="per-user-temp-files">Per user archived Windows Error Reporting</label>
+      <span class="description">Files used for error reporting and solution checking</span>
+    </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="system-archived-error-reporting" value="system-archived-error-reporting">
+      <label for="system-archived-error-reporting">System archived Windows Error Reporting</label>
+      <span class="description">Files used for error reporting and solution checking</span>
+    </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="per-user-queued-error-reporting" value="per-user-queued-error-reporting">
+      <label for="per-user-queued-error-reporting">Per user queued Windows Error Reporting</label>
+      <span class="description">Files used for error reporting and solution checking</span>
+    </div>
+    
+    <div class="cleanup-item">
+      <input type="checkbox" id="system-queued-error-reporting" value="system-queued-error-reporting">
+      <label for="system-queued-error-reporting">System queued Windows Error Reporting</label>
+      <span class="description">Files used for error reporting and solution checking</span>
+    </div>
   </div>
   
   <div class="actions">
@@ -135,6 +147,7 @@
     </div>
     <div class="action-buttons">
       <button id="rescanSizes">Rescan Sizes</button>
+      <button id="showAllItems">Show All Items</button>
       <button id="selectAll">Select All</button>
       <button id="clearAll">Clear All</button>
       <button id="runCleanup">Run Cleanup</button>
