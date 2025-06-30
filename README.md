@@ -14,5 +14,3 @@ A modern, portable Windows disk cleanup utility built with Electron.
 ## Build Outputs
 
 - **Windows**: `Windows-Disk-Cleanup-1.0.0-portable.exe`
-- **macOS**: `Windows-Disk-Cleanup-1.0.0.dmg`
-- **Linux**: `Windows-Disk-Cleanup-1.0.0.AppImage`
